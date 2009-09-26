@@ -98,121 +98,18 @@ function MainWindow(args) {
 
 MainWindow.prototype = {
     _init : function(args) {
-        this._width = args.width;
-        this._height = args.height;
-        this._buildUI();
-
+        this._response = null;
+        this._latScale = 0;
+        this._lonScale = 0;
         this._nodes = {};
         this._ways = {};
+        this._width = args.width;
+        this._height = args.height;
+
+        this._buildUI();
         this._api = new OSMAPI();
         this._api.connect('logged-in', Lang.bind(this, this._onApiLoggedIn));
-        this._api.login();
-    },
-    
-    _onApiLoggedIn : function() {
-        this._statusBar.push(0, "Logged in!");            
-        this._api.getMap(Lang.bind(this, this._onGetMapResponse),
-                         -47.889, -22.010, -47.880, -22.001);
-    },
-
-    _onGetMapResponse : function(response) {
-        this._statusBar.push(0, "Got response!");
-        this._response = response;
-        let cr = this._texture.create();
-        if (cr.status() != 0) {
-            throw Error(cr.status());
-        }
-        this._drawMapOnContext(cr, response);
-    },
-
-    _drawMapOnContext : function(cr, response) {
-        let bounds = response.bounds;
-
-        log("(" + bounds.@minlon + "," + bounds.@minlat + ") -> " +
-            "(" + bounds.@maxlon + "," + bounds.@maxlat + ")");
-        let latScale = this._width / Math.abs(bounds.@minlat - bounds.@maxlat);
-        let lonScale = this._height / Math.abs(bounds.@minlon - bounds.@maxlon);
-
-        let i;
-        for (i = 0; i < response.node.length(); ++i) {
-            let node = response.node[i];
-            this._nodes[node.@id] = node;
-            log(node.@lon + ':' + node.@lat);
-        }
-        cr.set_line_width(0.5);
-        cr.set_source_rgb(0, 0, 0);
-
-        if (cr.status() != 0) {
-            throw Error(cr.status());
-        }
-        let translate = Lang.bind(this, function(node) {
-            let x = (node.@lon - bounds.@minlon) * lonScale;
-            let y = (node.@lat - bounds.@minlat) * latScale;
-            let tx = Math.round(x);
-            let ty = Math.round(this._width-y);
-            log("x,y: " + tx + "," + ty);
-            return [tx, ty];
-
-        });
-
-        log("ways: " + response.way.length());
-        for (i = 0; i < response.way.length(); ++i) {
-            let way = response.way[i];
-            log(way.toXMLString());
-            let name = way.tag.(@k == "name").@v;
-            if (name != undefined) log(name);
-
-            let x, y;
-
-            [x, y] = translate(this._nodes[way.nd[0].@ref]);
-            cr.move_to(x, y);
-
-            for (let j = 1; j < way.nd.length(); j++) {
-                let node = this._nodes[way.nd[j].@ref];
-                [x, y] = translate(node);
-                cr.line_to(x, y);
-            }
-            this._ways[way.@id] = way;   
-            cr.stroke();
-        }
-        cr.destroy();
-        delete cr;
-        //log(response.toXMLString());
-    },
-    
-    _quit : function() {
-        Gtk.main_quit();
-        this._win.destroy();
-    },
-
-    // Callbacks
-    _onWinDestroy : function() {
-        this._quit();
-    },
-
-    _onWinKeyPressEvent : function(win, event) {
-        if (event.get_symbol() == Gdk.Escape) {
-            this._quit();
-        }
-     },
-
-    _onQuitActivate : function(action) {
-        this._quit();
-    },
-
-    _onExportToPngActivate : function(action) {
-        let imageSurface = Cairo.image_surface_create(Cairo.Format.RGB24, this._width, this._height);
-        let surface = imageSurface.get_surface();
-        let cr = Cairo.context_create(surface);
-        if (cr.status() != 0) {
-            throw Error(cr.status());
-        }
-        cr.set_source_rgb(1, 1, 1);
-        cr.rectangle(0, 0, this._width, this._height);
-        cr.fill();
-        this._drawMapOnContext(cr, this._response);
-        cr.paint();
-        surface.write_to_png("test.png");
+        this._login();
     },
 
     _buildUI : function() {
@@ -269,10 +166,143 @@ MainWindow.prototype = {
         box.pack_start(this._statusBar, false, false, 0);
         this._statusBar.show();
 
-        this._statusBar.push(0, "Logging in...");
-
         this._win.show();
+    },
+
+    _translateNodeCoordinates : function(node) {
+        let x = (node.@lon - this._response.bounds.@minlon) * this._lonScale;
+        let y = (node.@lat - this._response.bounds.@minlat) * this._latScale;
+        let tx = Math.round(x);
+        let ty = Math.round(this._width-y);
+        log("x,y: " + tx + "," + ty);
+        return [tx, ty];
+     },
+
+    _drawMapOnContext : function(cr) {
+
+        cr.set_line_width(0.5);
+        cr.set_source_rgb(0, 0, 0);
+
+        if (cr.status() != 0) {
+            throw Error(cr.status());
+        }
+
+        this._drawWaysOnContext(cr);
+        cr.destroy();
+        delete cr;
+    },
+
+    _drawWaysOnContext : function(cr) {
+        let ways = this._response.way;
+        for (let i = 0; i < ways.length(); ++i) {
+            this._drawWayOnContext(cr, ways[i]);
+            cr.stroke();
+        }
+    },
+
+    _drawWayOnContext : function(cr, way) {
+        log(way.toXMLString());
+        let name = way.tag.(@k == "name").@v;
+        if (name != undefined) log(name);
+
+        let x, y;
+
+        // First node of the way is where we start to draw our lines
+        [x, y] = this._translateNodeCoordinates(this._nodes[way.nd[0].@ref]);
+        cr.move_to(x, y);
+
+        // The rest we just call cr.line_to() for
+        for (let j = 1; j < way.nd.length(); j++) {
+            let node = this._nodes[way.nd[j].@ref];
+            [x, y] = this._translateNodeCoordinates(node);
+            cr.line_to(x, y);
+        }
+        this._ways[way.@id] = way;
+    },
+
+    _login : function() {
+        this._statusBar.push(0, "Logging in...");
+        this._api.login();
+    },
+
+    _quit : function() {
+        Gtk.main_quit();
+        this._win.destroy();
+    },
+
+    _setResponse : function(response) {
+        this._response = response;
+        let bounds = response.bounds;
+        log("Setting bounds from response: (" + bounds.@minlon + "," + bounds.@minlat + ") -> " +
+            "(" + bounds.@maxlon + "," + bounds.@maxlat + ")");
+
+        this._latScale = this._width / Math.abs(bounds.@minlat - bounds.@maxlat);
+        this._lonScale = this._height / Math.abs(bounds.@minlon - bounds.@maxlon);
+
+        for (let i = 0; i < response.node.length(); ++i) {
+            let node = response.node[i];
+            this._nodes[node.@id] = node;
+        }
+    },
+
+    _updateMapView : function() {
+        let cr = this._texture.create();
+        if (cr.status() != 0) {
+            throw Error(cr.status());
+        }
+        this._drawMapOnContext(cr);
+    },
+
+    _exportToPng : function(filename) {
+        if (!this._response) {
+            return;
+        }
+        let imageSurface = Cairo.image_surface_create(Cairo.Format.RGB24, this._width, this._height);
+        let surface = imageSurface.get_surface();
+        let cr = Cairo.context_create(surface);
+        if (cr.status() != 0) {
+            throw Error(cr.status());
+        }
+        cr.set_source_rgb(1, 1, 1);
+        cr.rectangle(0, 0, this._width, this._height);
+        cr.fill();
+        this._drawMapOnContext(cr);
+        cr.paint();
+        surface.write_to_png(filename);
+    },
+
+    // Callbacks
+
+    _onApiLoggedIn : function() {
+        this._statusBar.push(0, "Logged in!");
+        this._api.getMap(Lang.bind(this, this._onApiGetMap),
+                         -47.889, -22.010, -47.880, -22.001);
+    },
+
+    _onApiGetMap : function(response) {
+        this._statusBar.push(0, "Got response!");
+        this._setResponse(response);
+        this._updateMapView();
+    },
+
+    _onWinDestroy : function() {
+        this._quit();
+    },
+
+    _onWinKeyPressEvent : function(win, event) {
+        if (event.get_symbol() == Gdk.Escape) {
+            this._quit();
+        }
+     },
+
+    _onQuitActivate : function(action) {
+        this._quit();
+    },
+
+    _onExportToPngActivate : function(action) {
+        this._exportToPng("test.png");
     }
+
 }
 
 function initialize() {
