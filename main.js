@@ -19,14 +19,14 @@ HTTPClient.prototype = {
         this._session = new Soup.SessionAsync({});
         this._messages = {};
     },
-    
+
     get : function(uri, callback) {
        let msg = Soup.Message.new('GET', uri);
        msg.connect("finished", Lang.bind(this, this._onMessageFinished));
        this._session.queue_message(msg, null, null);
        this._messages[msg] = callback;
     },
-    
+
     _onMessageFinished : function(msg) {
         let callback = this._messages[msg]
 
@@ -50,7 +50,7 @@ OSMAPI.prototype = {
     login : function() {
         this._apiCall("capabilities", this._onCapabilitiesResponse);
     },
-        
+
     getMap : function(callback, minLon, maxLon, minLat, maxLat) {
         let api = 'map?bbox=';
         api += minLon + ',' + maxLon + ',' +
@@ -58,7 +58,7 @@ OSMAPI.prototype = {
         log("Calling API: " + api);             
         this._apiCall(api, callback);
     },
-    
+
     _apiCall : function(apiName, callback) {
         let url = "http://api.openstreetmap.org/api/0.6/" + apiName;
         this._http.get(url,
@@ -67,7 +67,7 @@ OSMAPI.prototype = {
     },
 
     // callbacks
-        
+
     _onApiCallResponse : function(data, callback) {
         let response;
         // E4X bafs at the <?xml version=...> header, remove it
@@ -78,7 +78,7 @@ OSMAPI.prototype = {
        }
         callback(response);
     },
-        
+
     _onCapabilitiesResponse : function(response) {
         if (response.api.version.@minimum != 0.6) {
             logError(new Error(), "Unsupported API version: " + osm.api.version.@minimum);
@@ -87,7 +87,7 @@ OSMAPI.prototype = {
         log("Capabilities checked, now logged in");
         this.emit('logged-in');
     }
-    
+
 }
 
 Signals.addSignalMethods(OSMAPI.prototype);
