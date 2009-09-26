@@ -140,8 +140,6 @@ MainWindow.prototype = {
             log(node.@lon + ':' + node.@lat);
         }
         cr.set_line_width(0.5);
-        cr.set_line_cap(Cairo.LineCap.ROUND);
-        cr.set_line_join(Cairo.LineJoin.ROUND);
         cr.set_source_rgb(0, 0, 0);
 
         if (cr.status() != 0) {
