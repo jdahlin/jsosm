@@ -6,12 +6,12 @@ const Mainloop = imports.mainloop;
 const Signals = imports.signals;
 
 const GLib = imports.gi.GLib;
-const Cairo = imports.gi.cairo;
 const Gdk = imports.gi.Gdk;
 const Gtk = imports.gi.Gtk;
 const Clutter = imports.gi.Clutter;
 const GtkClutter = imports.gi.GtkClutter;
 
+const Cairo = imports.Cairo;
 const XMLHttpRequest = imports.XMLHttpRequest;
 
 function OSMAPI() {
@@ -149,17 +149,10 @@ MainWindow.prototype = {
      },
 
     _drawMapOnContext : function(cr) {
-
-        cr.set_line_width(0.5);
-        cr.set_source_rgb(0, 0, 0);
-
-        if (cr.status() != 0) {
-            throw Error(cr.status());
-        }
+        cr.setLineWidth(0.5);
+        cr.setSourceRGB(0, 0, 0);
 
         this._drawWaysOnContext(cr);
-        cr.destroy();
-        delete cr;
     },
 
     _drawWaysOnContext : function(cr) {
@@ -179,13 +172,13 @@ MainWindow.prototype = {
 
         // First node of the way is where we start to draw our lines
         [x, y] = this._translateNodeCoordinates(this._nodes[way.nd[0].@ref]);
-        cr.move_to(x, y);
+        cr.moveTo(x, y);
 
         // The rest we just call cr.line_to() for
         for (let j = 1; j < way.nd.length(); j++) {
             let node = this._nodes[way.nd[j].@ref];
             [x, y] = this._translateNodeCoordinates(node);
-            cr.line_to(x, y);
+            cr.lineTo(x, y);
         }
         this._ways[way.@id] = way;
     },
@@ -216,29 +209,28 @@ MainWindow.prototype = {
     },
 
     _updateMapView : function() {
-        let cr = this._texture.create();
-        if (cr.status() != 0) {
-            throw Error(cr.status());
-        }
+        let cr = Cairo.Context.fromNative(this._texture.create())
         this._drawMapOnContext(cr);
+        cr.destroy();
+        delete cr;
     },
 
     _exportToPng : function(filename) {
         if (!this._response) {
             return;
         }
-        let imageSurface = Cairo.image_surface_create(Cairo.Format.RGB24, this._width, this._height);
-        let surface = imageSurface.get_surface();
-        let cr = Cairo.context_create(surface);
-        if (cr.status() != 0) {
-            throw Error(cr.status());
-        }
-        cr.set_source_rgb(1, 1, 1);
+        let imageSurface = new Cairo.ImageSurface({ format: Cairo.Format.RGB24,
+                                                    width: this._width,
+                                                    height: this._height });
+        let cr = new Cairo.Context({ surface: imageSurface });
+        cr.setSourceRGB(1, 1, 1);
         cr.rectangle(0, 0, this._width, this._height);
         cr.fill();
         this._drawMapOnContext(cr);
         cr.paint();
-        surface.write_to_png(filename);
+        cr.destroy();
+        delete cr;
+        imageSurface.write_to_png(filename);
     },
 
     // Callbacks
