@@ -1,3 +1,6 @@
+imports.gi.versions.Clutter = '1.0';
+imports.gi.versions.GtkClutter = '0.90';
+
 const Lang = imports.lang;
 const Mainloop = imports.mainloop;
 const Signals = imports.signals;
