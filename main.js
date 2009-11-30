@@ -11,35 +11,8 @@ const Gdk = imports.gi.Gdk;
 const Gtk = imports.gi.Gtk;
 const Clutter = imports.gi.Clutter;
 const GtkClutter = imports.gi.GtkClutter;
-const Soup = imports.gi.Soup;
 
-function HTTPClient() {
-    this._init();
-};
-
-HTTPClient.prototype = {
-    _init : function() {
-        this._session = new Soup.SessionAsync({});
-        this._messages = {};
-    },
-
-    get : function(uri, callback) {
-       let msg = Soup.Message.new('GET', uri);
-       msg.connect("finished", Lang.bind(this, this._onMessageFinished));
-       this._session.queue_message(msg, null, null);
-       this._messages[msg] = callback;
-    },
-
-    _onMessageFinished : function(msg) {
-        let callback = this._messages[msg]
-
-        Mainloop.idle_add(function() { 
-            callback(msg.response_body.data); 
-            return false; 
-        });
-    }
-
-};
+const XMLHttpRequest = imports.XMLHttpRequest;
 
 function OSMAPI() {
     this._init();
@@ -47,7 +20,6 @@ function OSMAPI() {
 
 OSMAPI.prototype = {
     _init : function() {
-        this._http = new HTTPClient();
     },
 
     login : function() {
@@ -57,34 +29,29 @@ OSMAPI.prototype = {
     getMap : function(callback, minLon, maxLon, minLat, maxLat) {
         let api = 'map?bbox=';
         api += minLon + ',' + maxLon + ',' +
-               minLat + ',' + maxLat;   
-        log("Calling API: " + api);             
+               minLat + ',' + maxLat;
+        log("Calling API: " + api);
         this._apiCall(api, callback);
     },
 
     _apiCall : function(apiName, callback) {
         let url = "http://api.openstreetmap.org/api/0.6/" + apiName;
-        this._http.get(url,
-                       Lang.bind(this, this._onApiCallResponse, 
-                                 Lang.bind(this, callback)));
+        let request = new XMLHttpRequest.XMLHttpRequest();
+        request.open('GET', url, true);
+        request.onreadystatechange = Lang.bind(this, this._onReadyStateChange,
+                                                     Lang.bind(this, callback), request);
+        request.send();
     },
 
     // callbacks
 
-    _onApiCallResponse : function(data, callback) {
-        let response;
-        // E4X bafs at the <?xml version=...> header, remove it
-        if (data.slice(0, 5) == '<?xml') {
-            response = new XML(data.slice(39));
-        } else {
-            response = data;
-       }
-        callback(response);
+    _onReadyStateChange : function(callback, request) {
+        callback(request.responseE4X);
     },
 
     _onCapabilitiesResponse : function(response) {
         if (response.api.version.@minimum != 0.6) {
-            logError(new Error(), "Unsupported API version: " + osm.api.version.@minimum);
+            logError(new Error(), "Unsupported API version: " + response.api.version.@minimum);
             Gtk.main_quit();
         }
         log("Capabilities checked, now logged in");
