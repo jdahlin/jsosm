@@ -157,9 +157,9 @@ MainWindow.prototype = {
         box.pack_start(this._embed, true, true, 0);
         this._embed.show();
 
-        this._texture = new Clutter.CairoTexture({ surface_width: this._width, 
+        this._texture = new Clutter.CairoTexture({ surface_width: this._width,
                                                    surface_height: this._height });
-        this._stage = this._embed.get_stage(); 
+        this._stage = this._embed.get_stage();
         this._stage.add_actor(this._texture);
 
         this._statusBar = new Gtk.Statusbar();
